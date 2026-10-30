@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Random Targa</title>
+  <meta name="description" content="Crea una targa italiana personalizzata secondo le regole di composizione, tokenizzala e gestiscila nel tuo garage.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">I</span>
+      <div>
+        <h1>Random Targa</h1>
+        <p>Crea, tokenizza e gestisci la targa del tuo mezzo</p>
+      </div>
+    </div>
+    <div class="wallet" id="wallet">
+      <label for="wallet-select" class="sr-only">Wallet attivo</label>
+      <select id="wallet-select"></select>
+      <button class="btn ghost small" id="wallet-new" type="button">+ Wallet</button>
+      <button class="btn ghost small" id="wallet-copy" type="button" title="Copia indirizzo">Copia</button>
+    </div>
+  </header>
+
+  <nav class="tabs" role="tablist">
+    <button role="tab" class="tab active" data-tab="crea" aria-selected="true">Crea targa</button>
+    <button role="tab" class="tab" data-tab="garage" aria-selected="false">Garage <span class="badge" id="garage-count">0</span></button>
+    <button role="tab" class="tab" data-tab="registro" aria-selected="false">Registro</button>
+    <button role="tab" class="tab" data-tab="regole" aria-selected="false">Regole</button>
+  </nav>
+
+  <main>
+    <section class="kpis" aria-label="Riepilogo">
+      <div class="kpi"><span class="kpi-label">Targhe nel garage</span><span class="kpi-value" id="kpi-owned">0</span></div>
+      <div class="kpi"><span class="kpi-label">Token coniati</span><span class="kpi-value" id="kpi-minted">0</span></div>
+      <div class="kpi"><span class="kpi-label">Blocchi nel registro</span><span class="kpi-value" id="kpi-blocks">1</span></div>
+      <div class="kpi"><span class="kpi-label">Integrità registro</span><span class="kpi-value" id="kpi-integrity">—</span></div>
+    </section>
+
+    <!-- CREA -->
+    <section class="panel active" id="tab-crea" role="tabpanel">
+      <div class="grid-2">
+        <div class="card">
+          <h2>Componi la targa</h2>
+
+          <div class="field">
+            <span class="field-label">Tipo di veicolo</span>
+            <div class="segmented" id="type-select">
+              <button type="button" data-type="auto" class="active">Auto</button>
+              <button type="button" data-type="moto">Moto</button>
+              <button type="button" data-type="ciclomotore">Ciclomotore</button>
+              <button type="button" data-type="rimorchio">Rimorchio</button>
+            </div>
+          </div>
+
+          <div class="field">
+            <label class="field-label" for="plate-input">Combinazione</label>
+            <div class="input-row">
+              <input id="plate-input" autocomplete="off" spellcheck="false" maxlength="10" placeholder="GA 123 BC">
+              <button class="btn" type="button" id="random-btn">Genera casuale</button>
+            </div>
+            <p class="hint" id="type-hint"></p>
+          </div>
+
+          <div class="grid-2 tight" id="band-options">
+            <div class="field">
+              <label class="field-label" for="province-select">Sigla provincia (banda destra)</label>
+              <select id="province-select"><option value="">Nessuna</option></select>
+            </div>
+            <div class="field">
+              <label class="field-label" for="year-input">Anno immatricolazione</label>
+              <input id="year-input" type="number" min="1994" max="2099" placeholder="Opzionale">
+            </div>
+          </div>
+
+          <label class="check"><input type="checkbox" id="issued-only" checked> Genera solo serie già emesse</label>
+
+          <h3>Verifica regole</h3>
+          <ul class="checks" id="checks"></ul>
+        </div>
+
+        <div class="card preview-card">
+          <h2>Anteprima</h2>
+          <div class="plate-stage" id="plate-preview"></div>
+          <dl class="facts" id="facts"></dl>
+
+          <h3>Dati del veicolo <span class="muted">(metadati del token)</span></h3>
+          <div class="grid-2 tight">
+            <div class="field"><label class="field-label" for="meta-alias">Nome</label><input id="meta-alias" placeholder="La mia Panda"></div>
+            <div class="field"><label class="field-label" for="meta-make">Marca</label><input id="meta-make" placeholder="Fiat"></div>
+            <div class="field"><label class="field-label" for="meta-model">Modello</label><input id="meta-model" placeholder="Panda 4x4"></div>
+            <div class="field"><label class="field-label" for="meta-color">Colore</label><input id="meta-color" placeholder="Rosso"></div>
+          </div>
+
+          <div class="actions">
+            <button class="btn primary" type="button" id="mint-btn">Tokenizza e aggiungi al garage</button>
+            <button class="btn ghost" type="button" id="download-svg">Scarica SVG</button>
+          </div>
+          <p class="hint" id="mint-status" role="status"></p>
+        </div>
+      </div>
+    </section>
+
+    <!-- GARAGE -->
+    <section class="panel" id="tab-garage" role="tabpanel" hidden>
+      <div class="toolbar">
+        <input id="garage-search" type="search" placeholder="Cerca per targa, nome o modello">
+        <select id="garage-filter">
+          <option value="">Tutti i veicoli</option>
+          <option value="auto">Auto</option>
+          <option value="moto">Moto</option>
+          <option value="ciclomotore">Ciclomotori</option>
+          <option value="rimorchio">Rimorchi</option>
+        </select>
+      </div>
+      <div class="garage-grid" id="garage-grid"></div>
+      <div class="empty" id="garage-empty" hidden>
+        <p>Il tuo garage è vuoto.</p>
+        <button class="btn primary" type="button" data-goto="crea">Crea la tua prima targa</button>
+      </div>
+    </section>
+
+    <!-- REGISTRO -->
+    <section class="panel" id="tab-registro" role="tabpanel" hidden>
+      <div class="toolbar">
+        <button class="btn" type="button" id="verify-btn">Verifica integrità</button>
+        <button class="btn ghost" type="button" id="export-btn">Esporta registro</button>
+        <label class="btn ghost" for="import-file">Importa registro</label>
+        <input type="file" id="import-file" accept="application/json" hidden>
+        <button class="btn danger ghost" type="button" id="reset-btn">Azzera</button>
+      </div>
+      <div class="card">
+        <table class="ledger">
+          <thead><tr><th>#</th><th>Data</th><th>Operazione</th><th>Targa</th><th>Da → A</th><th>Hash blocco</th></tr></thead>
+          <tbody id="ledger-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- REGOLE -->
+    <section class="panel" id="tab-regole" role="tabpanel" hidden>
+      <div class="card prose">
+        <h2>Come si compone una targa italiana</h2>
+        <p>Dal 1994 le targhe italiane seguono un sistema alfanumerico nazionale, non più legato alla provincia. La combinazione avanza in modo progressivo: prima il numero (001–999), poi la coppia di lettere finale (AA→ZZ) e infine la coppia iniziale.</p>
+        <table class="rules">
+          <thead><tr><th>Veicolo</th><th>Formato</th><th>Esempio</th></tr></thead>
+          <tbody id="rules-body"></tbody>
+        </table>
+        <h3>Lettere ammesse</h3>
+        <p>Si usano 22 lettere: <code id="letters"></code>. Sono escluse <strong>I, O, Q, U</strong> perché facilmente confondibili con 1, 0 e V.</p>
+        <h3>Bande laterali</h3>
+        <p>La banda blu sinistra riporta il cerchio di stelle dell'Unione Europea e la sigla internazionale <strong>I</strong>. Nella banda destra possono comparire, facoltativamente, l'anno d'immatricolazione (in alto) e la sigla della provincia (in basso).</p>
+        <h3>Combinazioni riservate</h3>
+        <p>Il prefisso <strong>EE</strong> è riservato ai veicoli per Escursionisti Esteri; i rimorchi iniziano sempre con <strong>X</strong>, così come i contrassegni dei ciclomotori.</p>
+        <p class="note">In Italia non è possibile scegliere la combinazione della targa stradale: quella creata qui è una targa digitale/da collezione. Il registro di tokenizzazione è locale al browser: esportalo per conservarne una copia. L'anno stimato della serie è un'approssimazione.</p>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="token-dialog">
+    <form method="dialog" class="dialog-inner" id="token-form">
+      <header class="dialog-head">
+        <h2 id="dlg-title">Dettagli token</h2>
+        <button class="btn ghost small" value="close" aria-label="Chiudi">✕</button>
+      </header>
+      <div class="plate-stage small" id="dlg-plate"></div>
+      <dl class="facts" id="dlg-facts"></dl>
+
+      <h3>Modifica dati</h3>
+      <div class="grid-2 tight">
+        <div class="field"><label class="field-label" for="dlg-alias">Nome</label><input id="dlg-alias"></div>
+        <div class="field"><label class="field-label" for="dlg-make">Marca</label><input id="dlg-make"></div>
+        <div class="field"><label class="field-label" for="dlg-model">Modello</label><input id="dlg-model"></div>
+        <div class="field"><label class="field-label" for="dlg-color">Colore</label><input id="dlg-color"></div>
+      </div>
+      <div class="actions"><button class="btn" type="button" id="dlg-save">Salva modifiche</button></div>
+
+      <h3>Trasferisci</h3>
+      <div class="input-row">
+        <input id="dlg-to" list="wallet-list" placeholder="0x… indirizzo destinatario">
+        <datalist id="wallet-list"></datalist>
+        <button class="btn" type="button" id="dlg-transfer">Trasferisci</button>
+      </div>
+
+      <h3>Storico</h3>
+      <ol class="history" id="dlg-history"></ol>
+
+      <div class="actions spread">
+        <button class="btn ghost" type="button" id="dlg-metadata">Scarica metadati JSON</button>
+        <button class="btn danger" type="button" id="dlg-burn">Brucia token</button>
+      </div>
+      <p class="hint" id="dlg-status" role="status"></p>
+    </form>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script src="js/targa-rules.js"></script>
+  <script src="js/ledger.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
