@@ -3,16 +3,23 @@
 
   var R = window.TargaRules;
   var G = window.TargaGame;
-  var ledger = new window.TargaLedger.Ledger();
+  var CONFIG = window.RANDOM_TARGA_CONFIG || {};
+  var SUPABASE_JS = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js';
 
-  var SPINS_KEY = 'random-targa:spins';
   var reducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  var store = null;
+  // Fotografia dei dati: { me, garages, plates, events }.
+  var data = { me: null, garages: [], plates: [], events: [] };
 
   var state = {
     type: 'auto',
     plate: '',
     openToken: null,
     spinning: false,
+    minting: false,
+    onboarding: false,
+    transferTo: null,
     progress: null // ultimo snapshot di livello/trofei, per rilevare i progressi
   };
 
@@ -28,6 +35,8 @@
     return new Date(iso).toLocaleString('it-IT', { dateStyle: 'medium', timeStyle: 'short' });
   }
 
+  function delay(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+
   function isSquare(type) { return type === 'moto' || type === 'ciclomotore'; }
 
   function plateSVG(type, plate, meta) {
@@ -38,33 +47,43 @@
     return String(name || 'G').trim().split(/\s+/).slice(0, 2).map(function (w) { return w[0]; }).join('').toUpperCase();
   }
 
-  // Nome del garage associato a un indirizzo interno.
-  function garageName(address) {
-    var w = ledger.state.wallets.filter(function (x) { return x.address.toLowerCase() === String(address).toLowerCase(); })[0];
-    return w ? w.name : 'un altro garage';
+  function sameId(a, b) { return !!a && String(a).toLowerCase() === String(b || '').toLowerCase(); }
+
+  function garageById(id) {
+    return data.garages.filter(function (g) { return sameId(g.id, id); })[0] || null;
+  }
+
+  function garageName(id) {
+    var g = garageById(id);
+    return g ? g.name : 'un altro garage';
   }
 
   // Codice certificato leggibile, ricavato dall'identificativo interno.
-  function certCode(tokenId) {
-    return 'RT-' + tokenId.slice(2, 6).toUpperCase() + '-' + tokenId.slice(-4).toUpperCase();
+  function certCode(id) {
+    var hex = String(id).replace(/^0x/, '').replace(/[^0-9a-f]/gi, '');
+    return 'RT-' + hex.slice(0, 4).toUpperCase() + '-' + hex.slice(-4).toUpperCase();
   }
 
-  // --- Contatore giri della ruota (per garage) ---
-  function readSpins() {
-    try { return JSON.parse(localStorage.getItem(SPINS_KEY)) || {}; } catch (e) { return {}; }
+  function myId() { return data.me ? data.me.id : null; }
+
+  function platesOf(id) {
+    return data.plates.filter(function (p) { return sameId(p.owner, id); });
   }
 
-  function spinsOf(address) { return readSpins()[address] || 0; }
+  function findPlate(plate, type) {
+    return data.plates.filter(function (p) { return p.plate === plate && p.vehicleType === type; })[0] || null;
+  }
 
-  function addSpin(address) {
-    var all = readSpins();
-    all[address] = (all[address] || 0) + 1;
-    try { localStorage.setItem(SPINS_KEY, JSON.stringify(all)); } catch (e) { /* noop */ }
+  function plateById(id) {
+    return data.plates.filter(function (p) { return p.id === id; })[0] || null;
+  }
+
+  function statsFor(garage) {
+    return G.stats({ id: garage.id, events: data.events, owned: platesOf(garage.id).length, spins: garage.spins });
   }
 
   function currentStats() {
-    var w = ledger.activeWallet();
-    return w ? G.stats(ledger, w.address, { spins: spinsOf(w.address) }) : null;
+    return data.me ? statsFor(garageById(data.me.id) || data.me) : null;
   }
 
   // --- Effetti ---
@@ -74,7 +93,7 @@
     t.textContent = msg;
     t.classList.add('show');
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(function () { t.classList.remove('show'); }, 2600);
+    toastTimer = setTimeout(function () { t.classList.remove('show'); }, 3000);
   }
 
   // Coriandoli: in pagina attorno a originEl, oppure dentro un contenitore (es. una finestra modale).
@@ -163,10 +182,10 @@
     var s = currentStats();
     if (!s) return;
     var unlocked = G.achievements(s).filter(function (a) { return a.unlocked; });
-    var snap = { address: ledger.state.activeWallet, level: s.level.level, ids: unlocked.map(function (a) { return a.id; }) };
+    var snap = { id: myId(), level: s.level.level, ids: unlocked.map(function (a) { return a.id; }) };
     var prev = state.progress;
     state.progress = snap;
-    if (silent || !prev || prev.address !== snap.address) return;
+    if (silent || !prev || prev.id !== snap.id) return;
     unlocked.filter(function (a) { return prev.ids.indexOf(a.id) === -1; }).forEach(function (a) {
       pendingAchievements.push(a);
     });
@@ -189,17 +208,16 @@
   function bindTilt(root) {
     if (reducedMotion) return;
     root.addEventListener('pointermove', function (e) {
-      var el = e.target.closest('.tilt');
+      var el = e.target.closest && e.target.closest('.tilt');
       if (!el) return;
       var r = el.getBoundingClientRect();
       var x = (e.clientX - r.left) / r.width - 0.5;
       var y = (e.clientY - r.top) / r.height - 0.5;
       el.style.setProperty('--rx', (-y * 12).toFixed(2) + 'deg');
       el.style.setProperty('--ry', (x * 16).toFixed(2) + 'deg');
-      el.style.setProperty('--mx', ((x + 0.5) * 100).toFixed(1) + '%');
     });
     root.addEventListener('pointerout', function (e) {
-      var el = e.target.closest('.tilt');
+      var el = e.target.closest && e.target.closest('.tilt');
       if (el && !el.contains(e.relatedTarget)) {
         el.style.setProperty('--rx', '0deg');
         el.style.setProperty('--ry', '0deg');
@@ -207,14 +225,31 @@
     });
   }
 
+  // --- Dati ---
+  function refresh() {
+    return store.load().then(function (d) {
+      data = d;
+      renderAll();
+    });
+  }
+
+  // Esegue un'azione sull'archivio mostrando l'eventuale errore nel campo indicato.
+  function run(action, statusEl) {
+    if (statusEl) statusEl.textContent = '';
+    return action().then(refresh).then(function () { return true; }, function (e) {
+      if (statusEl) statusEl.textContent = e.message;
+      else toast(e.message);
+      return false;
+    });
+  }
+
   // --- Profilo e progressi ---
   function renderProfile() {
-    var w = ledger.activeWallet();
     var s = currentStats();
-    if (!w || !s) return;
+    if (!data.me || !s) return;
     var lv = s.level;
-    $('profile-name').textContent = w.name;
-    $('profile-avatar').textContent = initials(w.name);
+    $('profile-name').textContent = data.me.name;
+    $('profile-avatar').textContent = initials(data.me.name);
     $('profile-level').textContent = 'Lv ' + lv.level + ' · ' + lv.name;
     $('profile-xpfill').style.width = (lv.progress * 100).toFixed(1) + '%';
 
@@ -288,8 +323,7 @@
   }
 
   function renderPlateOnly(text) {
-    var stage = $('plate-stage');
-    stage.classList.toggle('square', isSquare(state.type));
+    $('plate-stage').classList.toggle('square', isSquare(state.type));
     $('plate-preview').innerHTML = plateSVG(state.type, text, currentMeta());
   }
 
@@ -313,8 +347,8 @@
       return '<li data-tier="' + G.TIERS[t.tier].id + '">✦ ' + esc(t.label) + '</li>';
     }).join('') : '';
 
-    var existing = result.valid ? ledger.findByPlate(result.plate, state.type) : null;
-    var mine = existing && existing.owner === ledger.state.activeWallet;
+    var existing = result.valid ? findPlate(result.plate, state.type) : null;
+    var mine = existing && sameId(existing.owner, myId());
     var facts = [['Targa', '<strong>' + esc(result.formatted || '—') + '</strong>'], ['Tipo', esc(R.TYPES[state.type].label)]];
     if (result.series) facts.push(['Serie', result.series.issued ? 'in circolazione dal ' + result.series.yearLabel + ' circa' : 'non ancora emessa (arriverà verso il ' + result.series.yearLabel + ')']);
     if (meta.province) facts.push(['Provincia', esc(R.PROVINCE[meta.province])]);
@@ -324,24 +358,24 @@
     $('facts').innerHTML = facts.map(function (f) { return '<dt>' + f[0] + '</dt><dd>' + f[1] + '</dd>'; }).join('');
 
     $('mint-reward').textContent = '+' + rarity.xp + ' XP';
-    $('mint-btn').disabled = !result.valid || !!existing || state.spinning;
-    $('mint-btn').dataset.tier = rarity.tier;
+    $('mint-btn').disabled = !result.valid || !!existing || state.spinning || state.minting || !data.me;
     if (!state.minting) $('mint-status').textContent = existing && !mine ? 'Questa combinazione ha già un proprietario: gira la ruota per trovarne un\'altra!' : '';
   }
 
   // La ruota: i caratteri scorrono e si fermano uno alla volta.
   function spin() {
-    if (state.spinning) return;
+    if (state.spinning || !data.me) return;
     var target = R.randomPlate(state.type, { issuedOnly: $('issued-only').checked });
-    var w = ledger.activeWallet();
-    addSpin(w.address);
-    var btn = $('random-btn');
+    store.addSpin().catch(function () { /* il giro resta valido anche se non viene contato */ });
+    var g = garageById(myId());
+    if (g) g.spins = (g.spins || 0) + 1;
 
     if (reducedMotion) {
       finishSpin(target);
       return;
     }
 
+    var btn = $('random-btn');
     state.spinning = true;
     btn.classList.add('spinning');
     $('mint-btn').disabled = true;
@@ -391,13 +425,14 @@
       toast(rank >= 4 ? '👑 Incredibile, una targa leggendaria!' : rank === 3 ? '🔥 Wow, una targa epica!' : '💎 Hai trovato una targa rara!');
     }
     floatText($('random-btn'), '+' + G.XP.SPIN + ' XP', 'small');
-    refreshProgress();
+    renderProfile();
+    renderLeaderboard();
+    checkProgress();
   }
 
   function mint() {
     var result = R.validate(state.type, state.plate);
     if (!result.valid) return;
-    var wallet = ledger.activeWallet();
     var meta = currentMeta();
     var rarity = rarityOf(state.type, result.plate, meta, result.series);
     var btn = $('mint-btn');
@@ -407,41 +442,38 @@
     stage.classList.add('certifying');
     $('mint-status').textContent = 'Stiamo sigillando il certificato della tua targa…';
 
-    setTimeout(function () {
-      try {
-        ledger.mint({ plate: result.plate, vehicleType: state.type, owner: wallet.address, metadata: meta });
-      } catch (e) {
+    Promise.all([store.mint(result.plate, state.type, meta), delay(reducedMotion ? 0 : 900)])
+      .then(refresh)
+      .then(function () {
+        stage.classList.remove('certifying');
+        var stamp = $('stamp');
+        stamp.classList.remove('show');
+        void stamp.offsetWidth;
+        stamp.classList.add('show');
+        confetti(stage, 90 + rarity.rank * 30);
+        floatText(btn, '+' + rarity.xp + ' XP', 'big');
+        ['meta-alias', 'meta-make', 'meta-model', 'meta-color'].forEach(function (id) { $(id).value = ''; });
+        state.minting = false;
+        renderComposer();
+        $('mint-status').textContent = '🎉 ' + result.formatted + ' è tua! La trovi nel garage.';
+        setTimeout(function () { stamp.classList.remove('show'); }, 2200);
+      }, function (e) {
         stage.classList.remove('certifying');
         state.minting = false;
-        $('mint-status').textContent = e.message;
-        renderComposer();
-        return;
-      }
-      stage.classList.remove('certifying');
-      var stamp = $('stamp');
-      stamp.classList.remove('show');
-      void stamp.offsetWidth;
-      stamp.classList.add('show');
-      confetti(stage, 90 + rarity.rank * 30);
-      floatText(btn, '+' + rarity.xp + ' XP', 'big');
-      ['meta-alias', 'meta-make', 'meta-model', 'meta-color'].forEach(function (id) { $(id).value = ''; });
-      refreshAll();
-      state.minting = false;
-      $('mint-status').textContent = '🎉 ' + result.formatted + ' è tua! La trovi nel garage.';
-      setTimeout(function () { stamp.classList.remove('show'); }, 2200);
-    }, reducedMotion ? 30 : 900);
+        // Qualcun altro potrebbe averla appena presa: aggiorniamo i dati.
+        refresh().catch(function () { /* noop */ }).then(function () { $('mint-status').textContent = e.message; });
+      });
   }
 
   // --- Garage ---
   function renderGarage() {
-    var wallet = ledger.activeWallet();
-    var all = wallet ? ledger.tokensOf(wallet.address) : [];
+    var all = platesOf(myId());
     var q = $('garage-search').value.trim().toLowerCase();
     var f = $('garage-filter').value;
     var list = all.map(function (t) {
-      return { t: t, r: G.analyze(t.vehicleType, t.plate, { province: t.metadata && t.metadata.province }) };
+      return { t: t, r: G.analyze(t.vehicleType, t.plate, { province: t.metadata.province }) };
     }).filter(function (x) {
-      var t = x.t, m = t.metadata || {};
+      var t = x.t, m = t.metadata;
       if (f && t.vehicleType !== f) return false;
       if (!q) return true;
       return t.plate.toLowerCase().indexOf(q.replace(/\s/g, '')) !== -1 ||
@@ -451,7 +483,7 @@
 
     $('garage-empty').hidden = all.length > 0;
     $('garage-grid').innerHTML = list.map(function (x, i) {
-      var t = x.t, r = x.r, m = t.metadata || {};
+      var t = x.t, r = x.r, m = t.metadata;
       var title = m.alias || [m.make, m.model].filter(Boolean).join(' ') || R.format(t.vehicleType, t.plate);
       var sub = [m.make, m.model, m.color].filter(Boolean).join(' · ') || 'Tocca "Gestisci" per personalizzarla';
       return '<article class="vehicle" data-tier="' + r.tier + '" style="--i:' + i + '">' +
@@ -462,7 +494,7 @@
           '<strong>' + esc(title) + '</strong>' +
           '<span class="sub">' + esc(sub) + '</span>' +
         '</div>' +
-        '<div class="vehicle-foot"><button class="btn small" type="button" data-open="' + t.tokenId + '">Gestisci</button></div>' +
+        '<div class="vehicle-foot"><button class="btn small" type="button" data-open="' + esc(t.id) + '">Gestisci</button></div>' +
       '</article>';
     }).join('');
     if (all.length && !list.length) {
@@ -471,11 +503,12 @@
   }
 
   // --- Dettaglio targa ---
-  function openToken(tokenId) {
-    var t = ledger.tokens[tokenId];
+  function openToken(plateId) {
+    var t = plateById(plateId);
     if (!t) return;
-    state.openToken = tokenId;
-    var m = t.metadata || {};
+    var reopening = state.openToken === plateId && $('token-dialog').open;
+    state.openToken = plateId;
+    var m = t.metadata;
     var r = G.analyze(t.vehicleType, t.plate, { province: m.province });
     $('dlg-title').textContent = m.alias || 'Targa ' + R.format(t.vehicleType, t.plate);
     var stage = $('dlg-plate');
@@ -488,22 +521,24 @@
       ['Targa', '<strong>' + R.format(t.vehicleType, t.plate) + '</strong>'],
       ['Tipo', esc(R.TYPES[t.vehicleType].label)],
       ['Certificata il', fmtDate(t.mintedAt)],
-      ['Codice certificato', '<span class="code">' + certCode(t.tokenId) + '</span>']
+      ['Codice certificato', '<span class="code">' + certCode(t.id) + '</span>']
     ].map(function (f) { return '<dt>' + f[0] + '</dt><dd>' + f[1] + '</dd>'; }).join('');
-    $('dlg-alias').value = m.alias || '';
-    $('dlg-make').value = m.make || '';
-    $('dlg-model').value = m.model || '';
-    $('dlg-color').value = m.color || '';
-    $('dlg-status').textContent = '';
+    if (!reopening) {
+      $('dlg-alias').value = m.alias || '';
+      $('dlg-make').value = m.make || '';
+      $('dlg-model').value = m.model || '';
+      $('dlg-color').value = m.color || '';
+      $('dlg-status').textContent = '';
+      $('dlg-to').value = '';
+    }
+    if (!reopening) renderTransferTarget();
 
-    var others = ledger.state.wallets.filter(function (w) { return w.address !== ledger.state.activeWallet; });
-    $('dlg-to').innerHTML = others.map(function (w) {
-      return '<option value="' + w.address + '">' + esc(w.name) + '</option>';
-    }).join('');
-    $('dlg-transfer-row').hidden = !others.length;
-    $('dlg-transfer-hint').textContent = others.length ? '' : 'Crea un altro garage dal menu del profilo per poter cedere questa targa.';
+    // In modalità demo suggeriamo gli altri garage del dispositivo.
+    $('garage-codes').innerHTML = store.caps.multiGarage ? data.garages.filter(function (g) { return !sameId(g.id, myId()); }).map(function (g) {
+      return '<option value="' + esc(g.code) + '">' + esc(g.name) + '</option>';
+    }).join('') : '';
 
-    $('dlg-history').innerHTML = t.history.slice().reverse().map(function (h) {
+    $('dlg-history').innerHTML = data.events.filter(function (e) { return e.plateId === t.id; }).reverse().map(function (h) {
       var text = h.type === 'MINT' ? '✨ Certificata da ' + esc(garageName(h.to))
         : h.type === 'TRANSFER' ? '🎁 Ceduta da ' + esc(garageName(h.from)) + ' a ' + esc(garageName(h.to))
         : h.type === 'BURN' ? '♻️ Rottamata' : '🔧 Dati del veicolo aggiornati';
@@ -513,20 +548,30 @@
     if (!dlg.open) dlg.showModal();
   }
 
-  function withToken(fn) {
-    var wallet = ledger.activeWallet();
-    try {
-      fn(state.openToken, wallet.address);
-      refreshAll();
-      return true;
-    } catch (e) {
-      $('dlg-status').textContent = e.message;
-      return false;
+  // Mostra il nome del garage destinatario mentre si digita il codice.
+  var lookupSeq = 0;
+  function renderTransferTarget() {
+    var code = $('dlg-to').value.trim();
+    var seq = ++lookupSeq;
+    state.transferTo = null;
+    $('dlg-transfer').disabled = true;
+    $('dlg-to-name').dataset.ok = '';
+    if (!code) {
+      $('dlg-to-name').textContent = 'Chiedi al destinatario il suo codice garage (lo trova nel suo profilo).';
+      return;
     }
+    store.findGarageByCode(code).then(function (g) {
+      if (seq !== lookupSeq) return;
+      var self = g && sameId(g.id, myId());
+      $('dlg-to-name').textContent = g ? (self ? 'Questo è il tuo garage' : '→ ' + g.name) : 'Nessun garage con questo codice';
+      $('dlg-to-name').dataset.ok = g && !self ? '1' : '';
+      $('dlg-transfer').disabled = !g || !!self;
+      state.transferTo = g && !self ? g : null;
+    }, function () { /* riprova alla prossima digitazione */ });
   }
 
   function certificate(t) {
-    var m = t.metadata || {};
+    var m = t.metadata;
     var r = G.analyze(t.vehicleType, t.plate, { province: m.province });
     var attrs = [
       { trait_type: 'Tipo veicolo', value: R.TYPES[t.vehicleType].label },
@@ -542,77 +587,97 @@
     return {
       name: 'Targa ' + R.format(t.vehicleType, t.plate),
       description: m.alias ? 'Targa italiana di "' + m.alias + '"' : 'Targa italiana da collezione',
-      certificate: certCode(t.tokenId),
+      certificate: certCode(t.id),
       garage: garageName(t.owner),
       image: 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svg))),
-      token_id: t.tokenId,
-      owner: t.owner,
+      token_id: t.id,
       attributes: attrs
     };
   }
 
   // --- Storico ---
   function renderHistory() {
-    var tokens = ledger.tokens;
-    var active = ledger.state.activeWallet;
-    var items = [];
-    ledger.state.chain.forEach(function (b) {
-      b.txs.forEach(function (tx) {
-        var tok = tokens[tx.tokenId];
-        if (!tok) return;
-        var plate = R.format(tok.vehicleType, tok.plate);
-        var mine = tx.to === active || tx.from === active;
-        if (!mine) return;
-        var ico, text, xp;
-        if (tx.type === 'MINT') { ico = '✨'; text = 'Hai certificato <strong>' + plate + '</strong>'; xp = G.analyze(tx.vehicleType, tx.plate, { province: tx.metadata && tx.metadata.province }).xp; }
-        else if (tx.type === 'TRANSFER' && tx.from === active) { ico = '🎁'; text = 'Hai ceduto <strong>' + plate + '</strong> a ' + esc(garageName(tx.to)); xp = G.XP.TRANSFER_OUT; }
-        else if (tx.type === 'TRANSFER') { ico = '📦'; text = 'Hai ricevuto <strong>' + plate + '</strong> da ' + esc(garageName(tx.from)); xp = G.XP.TRANSFER_IN; }
-        else if (tx.type === 'UPDATE') { ico = '🔧'; text = 'Hai personalizzato <strong>' + plate + '</strong>'; xp = G.XP.UPDATE; }
-        else { ico = '♻️'; text = 'Hai rottamato <strong>' + plate + '</strong>'; xp = G.XP.BURN; }
-        items.push('<li><span class="f-ico">' + ico + '</span><span class="f-body"><span>' + text + '</span>' +
-          '<span class="muted">' + fmtDate(b.timestamp) + '</span></span><span class="f-xp">+' + xp + ' XP</span></li>');
-      });
+    var me = myId();
+    var items = data.events.filter(function (e) { return sameId(e.to, me) || sameId(e.from, me); }).map(function (e) {
+      var plate = e.plate ? R.format(e.vehicleType, e.plate) : '—';
+      var ico, text, xp;
+      if (e.type === 'MINT') { ico = '✨'; text = 'Hai certificato <strong>' + plate + '</strong>'; xp = G.analyze(e.vehicleType, e.plate, { province: e.metadata && e.metadata.province }).xp; }
+      else if (e.type === 'TRANSFER' && sameId(e.from, me)) { ico = '🎁'; text = 'Hai ceduto <strong>' + plate + '</strong> a ' + esc(garageName(e.to)); xp = G.XP.TRANSFER_OUT; }
+      else if (e.type === 'TRANSFER') { ico = '📦'; text = 'Hai ricevuto <strong>' + plate + '</strong> da ' + esc(garageName(e.from)); xp = G.XP.TRANSFER_IN; }
+      else if (e.type === 'UPDATE') { ico = '🔧'; text = 'Hai personalizzato <strong>' + plate + '</strong>'; xp = G.XP.UPDATE; }
+      else { ico = '♻️'; text = 'Hai rottamato <strong>' + plate + '</strong>'; xp = G.XP.BURN; }
+      return '<li><span class="f-ico">' + ico + '</span><span class="f-body"><span>' + text + '</span>' +
+        '<span class="muted">' + fmtDate(e.at) + '</span></span><span class="f-xp">+' + xp + ' XP</span></li>';
     });
     $('feed').innerHTML = items.reverse().join('') || '<li class="muted">Ancora nessuna attività: inizia creando una targa!</li>';
 
-    $('ledger-body').innerHTML = ledger.state.chain.slice().reverse().map(function (b) {
-      return b.txs.map(function (tx) {
-        var tok = tokens[tx.tokenId];
-        var labels = { GENESIS: 'Apertura archivio', MINT: 'Certificazione', TRANSFER: 'Cessione', UPDATE: 'Personalizzazione', BURN: 'Rottamazione' };
-        return '<tr><td>' + b.index + '</td><td>' + fmtDate(b.timestamp) + '</td><td>' + labels[tx.type] + '</td>' +
-          '<td>' + (tok ? R.format(tok.vehicleType, tok.plate) : '—') + '</td>' +
-          '<td class="code" title="' + b.hash + '">' + b.hash.slice(0, 16) + '…</td></tr>';
+    var labels = { MINT: 'Certificazione', TRANSFER: 'Cessione', UPDATE: 'Personalizzazione', BURN: 'Rottamazione' };
+    $('ledger-body').innerHTML = data.events.slice().reverse().slice(0, 200).map(function (e) {
+      return '<tr><td>' + e.id + '</td><td>' + fmtDate(e.at) + '</td><td>' + labels[e.type] + '</td>' +
+        '<td>' + (e.plate ? R.format(e.vehicleType, e.plate) : '—') + '</td>' +
+        '<td>' + esc(garageName(e.type === 'MINT' || e.type === 'TRANSFER' ? e.to : e.from)) + '</td></tr>';
+    }).join('');
+  }
+
+  // --- Classifica ---
+  function renderLeaderboard() {
+    var rows = data.garages.map(function (g) {
+      return { g: g, s: statsFor(g) };
+    }).filter(function (x) { return x.s.xp > 0 || sameId(x.g.id, myId()); })
+      .sort(function (a, b) { return b.s.xp - a.s.xp; });
+    var medals = ['🥇', '🥈', '🥉'];
+    $('leaderboard-body').innerHTML = rows.slice(0, 50).map(function (x, i) {
+      var me = sameId(x.g.id, myId());
+      return '<tr class="' + (me ? 'me' : '') + '" style="--i:' + i + '">' +
+        '<td class="rank">' + (medals[i] || i + 1) + '</td>' +
+        '<td><span class="lb-name"><span class="avatar small">' + esc(initials(x.g.name)) + '</span><span>' + esc(x.g.name) + '</span>' + (me ? '<span class="tag">Tu</span>' : '') + '</span></td>' +
+        '<td>Lv ' + x.s.level.level + ' · ' + esc(x.s.level.name) + '</td>' +
+        '<td class="num">' + x.s.xp.toLocaleString('it-IT') + '</td>' +
+        '<td class="num">' + x.s.owned + '</td>' +
+        '<td>' + (x.s.minted ? '<span class="rarity small" data-tier="' + G.TIERS[x.s.bestRank].id + '">' + G.TIERS[x.s.bestRank].label + '</span>' : '—') + '</td>' +
+      '</tr>';
+    }).join('');
+    var pos = -1;
+    rows.forEach(function (x, i) { if (sameId(x.g.id, myId())) pos = i; });
+    $('leaderboard-me').textContent = pos >= 0 ? 'Sei in posizione ' + (pos + 1) + ' su ' + rows.length + '.' : '';
+  }
+
+  // --- Profilo ---
+  function renderProfileDialog() {
+    var me = data.me;
+    if (!me) return;
+    $('my-code').textContent = me.code;
+    $('rename-input').value = me.name;
+    $('local-garages').hidden = !store.caps.multiGarage;
+    $('account-section').hidden = !store.caps.account;
+    if (store.caps.multiGarage) {
+      $('garage-list').innerHTML = data.garages.map(function (g) {
+        var s = statsFor(g);
+        var active = sameId(g.id, me.id);
+        return '<li><button type="button" class="garage-item' + (active ? ' active' : '') + '" data-garage="' + esc(g.id) + '">' +
+          '<span class="avatar">' + esc(initials(g.name)) + '</span>' +
+          '<span><strong>' + esc(g.name) + '</strong><span class="muted">Lv ' + s.level.level + ' · ' + s.owned + ' targhe</span></span>' +
+          (active ? '<span class="tick">✓</span>' : '') + '</button></li>';
       }).join('');
-    }).join('');
+    }
+    if (store.caps.account) {
+      $('account-anon').hidden = !me.anonymous;
+      $('account-linked').hidden = !!me.anonymous;
+      $('account-email').textContent = me.email;
+    }
   }
 
-  function renderGarageMenu() {
-    var active = ledger.state.activeWallet;
-    $('garage-list').innerHTML = ledger.state.wallets.map(function (w) {
-      var s = G.stats(ledger, w.address, { spins: spinsOf(w.address) });
-      return '<li><button type="button" class="garage-item' + (w.address === active ? ' active' : '') + '" data-garage="' + w.address + '">' +
-        '<span class="avatar">' + esc(initials(w.name)) + '</span>' +
-        '<span><strong>' + esc(w.name) + '</strong><span class="muted">Lv ' + s.level.level + ' · ' + s.owned + ' targhe</span></span>' +
-        (w.address === active ? '<span class="tick">✓</span>' : '') + '</button></li>';
-    }).join('');
-    var aw = ledger.activeWallet();
-    $('rename-input').value = aw ? aw.name : '';
-  }
-
-  function refreshProgress() {
-    renderProfile();
-    checkProgress();
-  }
-
-  function refreshAll() {
+  function renderAll() {
     renderComposer();
     renderGarage();
     renderHistory();
-    refreshProgress();
-    if ($('profile-dialog').open) renderGarageMenu();
+    renderLeaderboard();
+    renderProfile();
+    checkProgress();
+    if ($('profile-dialog').open) renderProfileDialog();
     if (state.openToken && $('token-dialog').open) {
-      var t = ledger.tokens[state.openToken];
-      if (!t || t.burned || t.owner !== ledger.state.activeWallet) $('token-dialog').close();
+      var t = plateById(state.openToken);
+      if (!t || !sameId(t.owner, myId())) $('token-dialog').close();
       else openToken(state.openToken);
     }
   }
@@ -627,12 +692,6 @@
       p.hidden = p.id !== 'tab-' + name;
     });
     try { localStorage.setItem('random-targa:tab', name); } catch (e) { /* noop */ }
-  }
-
-  function switchGarage(address) {
-    ledger.setActiveWallet(address);
-    state.progress = null;
-    refreshAll();
   }
 
   // --- Eventi ---
@@ -669,37 +728,65 @@
 
     // Profilo / garage
     $('profile-btn').addEventListener('click', function () {
-      renderGarageMenu();
+      if (!data.me) return;
+      $('profile-status').textContent = '';
+      renderProfileDialog();
       $('profile-dialog').showModal();
+    });
+    $('copy-code').addEventListener('click', function () {
+      if (navigator.clipboard) navigator.clipboard.writeText(data.me.code).then(function () { toast('Codice garage copiato'); });
     });
     $('garage-list').addEventListener('click', function (e) {
       var b = e.target.closest('[data-garage]');
       if (!b) return;
-      switchGarage(b.dataset.garage);
-      $('profile-dialog').close();
-      toast('Benvenuto in ' + ledger.activeWallet().name);
+      state.progress = null;
+      run(function () { return store.switchGarage(b.dataset.garage); }).then(function () {
+        $('profile-dialog').close();
+        checkProgress(true);
+        toast('Benvenuto in ' + data.me.name);
+      });
     });
     $('rename-btn').addEventListener('click', function () {
       var name = $('rename-input').value.trim();
       if (!name) return;
-      ledger.renameWallet(ledger.state.activeWallet, name);
-      renderGarageMenu();
-      refreshAll();
-      toast('Garage rinominato');
+      run(function () { return store.renameGarage(name); }, $('profile-status')).then(function (ok) {
+        if (ok) toast('Garage rinominato');
+      });
     });
     $('new-garage-btn').addEventListener('click', function () {
       $('profile-dialog').close();
       openWelcome(true);
     });
+    $('link-email-btn').addEventListener('click', function () {
+      var email = $('link-email').value.trim();
+      if (!email) return;
+      store.linkEmail(email).then(function () {
+        $('profile-status').textContent = '📬 Controlla la posta: conferma il link e il tuo garage sarà salvato.';
+      }, function (e) { $('profile-status').textContent = e.message; });
+    });
+    $('login-email-btn').addEventListener('click', function () {
+      var email = $('login-email').value.trim();
+      if (!email) return;
+      if (!confirm('Accedendo a un altro account lascerai questo garage, che non è collegato a un\'email. Continuare?')) return;
+      store.signInWithEmail(email).then(function () {
+        $('profile-status').textContent = '📬 Ti abbiamo inviato un link per entrare: aprilo da questo dispositivo.';
+      }, function (e) { $('profile-status').textContent = e.message; });
+    });
+    $('logout-btn').addEventListener('click', function () {
+      store.signOut().then(function () { location.reload(); }, function (e) { $('profile-status').textContent = e.message; });
+    });
 
     $('welcome-form').addEventListener('submit', function () {
       var name = $('welcome-name').value.trim() || 'Il mio garage';
-      var w = ledger.addWallet(name);
-      switchGarage(w.address);
-      setTimeout(function () { confetti($('profile-btn'), 70); toast('🚗 ' + name + ' è aperto!'); }, 150);
+      state.progress = null;
+      state.onboarding = false;
+      run(function () { return store.createGarage(name); }).then(function () {
+        checkProgress(true);
+        setTimeout(function () { confetti($('profile-btn'), 70); toast('🚗 ' + name + ' è aperto!'); }, 150);
+      });
     });
     $('welcome-dialog').addEventListener('cancel', function (e) {
-      if (!ledger.state.wallets.length) e.preventDefault();
+      if (state.onboarding) e.preventDefault();
     });
 
     // Garage
@@ -719,63 +806,65 @@
         color: $('dlg-color').value.trim()
       };
       var btn = $('dlg-save');
-      if (withToken(function (id, from) { ledger.update(id, from, changes); })) {
+      run(function () { return store.update(state.openToken, changes); }, $('dlg-status')).then(function (ok) {
+        if (!ok) return;
         floatText(btn, '+' + G.XP.UPDATE + ' XP');
         toast('🔧 Veicolo personalizzato');
-      }
+      });
     });
+    $('dlg-to').addEventListener('input', renderTransferTarget);
     $('dlg-transfer').addEventListener('click', function () {
-      var to = $('dlg-to').value;
-      var t = ledger.tokens[state.openToken];
-      if (!confirm('Vuoi cedere la targa ' + R.format(t.vehicleType, t.plate) + ' a ' + garageName(to) + '?')) return;
+      var code = $('dlg-to').value.trim();
+      var to = state.transferTo;
+      var t = plateById(state.openToken);
+      if (!to || !confirm('Vuoi cedere la targa ' + R.format(t.vehicleType, t.plate) + ' a ' + to.name + '?')) return;
       var btn = $('dlg-transfer');
-      if (withToken(function (id, from) { ledger.transfer(id, from, to); })) {
+      run(function () { return store.transfer(state.openToken, code); }, $('dlg-status')).then(function (ok) {
+        if (!ok) return;
         floatText(btn, '+' + G.XP.TRANSFER_OUT + ' XP');
         confetti(btn, 50);
-        toast('🎁 Targa ceduta a ' + garageName(to));
-      }
+        toast('🎁 Targa ceduta a ' + to.name);
+      });
     });
     $('dlg-burn').addEventListener('click', function () {
-      var t = ledger.tokens[state.openToken];
+      var t = plateById(state.openToken);
       if (!confirm('Rottamare definitivamente la targa ' + R.format(t.vehicleType, t.plate) + '? Tornerà disponibile per tutti.')) return;
-      if (withToken(function (id, from) { ledger.burn(id, from); })) toast('♻️ Targa rottamata');
+      run(function () { return store.burn(state.openToken); }, $('dlg-status')).then(function (ok) {
+        if (ok) toast('♻️ Targa rottamata');
+      });
     });
     $('dlg-cert').addEventListener('click', function () {
-      var t = ledger.tokens[state.openToken];
+      var t = plateById(state.openToken);
       download('certificato-' + t.plate + '.json', JSON.stringify(certificate(t), null, 2), 'application/json');
     });
 
     // Storico
     $('verify-btn').addEventListener('click', function () {
-      var v = ledger.verify();
-      toast(v.ok ? '🛡️ Tutti i certificati sono autentici' : '⚠️ Archivio alterato alla voce #' + v.block + ': ' + v.reason);
+      store.verify().then(function (v) {
+        toast(v.ok ? '🛡️ Archivio integro: ' + v.total + ' operazioni verificate' : '⚠️ Archivio alterato alla voce #' + v.broken);
+      }, function (e) { toast(e.message); });
     });
     $('export-btn').addEventListener('click', function () {
-      download('random-targa-backup.json', ledger.exportJSON(true), 'application/json');
+      download('random-targa-backup.json', store.exportBackup(), 'application/json');
       toast('Backup salvato: conservalo in un posto sicuro, contiene l\'accesso ai tuoi garage');
     });
     $('import-file').addEventListener('change', function (e) {
       var file = e.target.files[0];
       if (!file) return;
       file.text().then(function (text) {
-        try {
-          ledger.importJSON(text);
-          state.progress = null;
-          if (!ledger.state.wallets.length) openWelcome(false);
-          refreshAll();
+        state.progress = null;
+        return run(function () { return store.importBackup(text); }).then(function (ok) {
+          if (!ok) return;
+          if (!data.me) openWelcome(false);
+          checkProgress(true);
           toast('Backup ripristinato');
-        } catch (err) {
-          toast(err.message);
-        }
-        e.target.value = '';
-      });
+        });
+      }).then(function () { e.target.value = ''; });
     });
     $('reset-btn').addEventListener('click', function () {
       if (!confirm('Cancellare tutti i garage, le targhe e i progressi? L\'operazione non è reversibile.')) return;
-      ledger.reset();
-      try { localStorage.removeItem(SPINS_KEY); } catch (e) { /* noop */ }
       state.progress = null;
-      openWelcome(false);
+      run(function () { return store.reset(); }).then(function () { openWelcome(false); });
     });
 
     $('levelup-dialog').addEventListener('close', flushAchievements);
@@ -784,9 +873,45 @@
   }
 
   function openWelcome(another) {
-    $('welcome-name').value = another ? 'Garage ' + (ledger.state.wallets.length + 1) : '';
+    state.onboarding = !another;
+    $('welcome-name').value = another ? 'Garage ' + (data.garages.length + 1) : '';
     $('welcome-dialog').showModal();
     $('welcome-name').focus();
+  }
+
+  function loadScript(src) {
+    return new Promise(function (resolve, reject) {
+      var s = document.createElement('script');
+      s.src = src;
+      s.onload = resolve;
+      s.onerror = function () { reject(new Error('Impossibile caricare il servizio online. Controlla la connessione.')); };
+      document.head.appendChild(s);
+    });
+  }
+
+  function createStore() {
+    if (CONFIG.supabaseUrl && CONFIG.supabaseAnonKey) {
+      return loadScript(SUPABASE_JS).then(function () {
+        var client = window.supabase.createClient(CONFIG.supabaseUrl, CONFIG.supabaseAnonKey);
+        return new window.SupabaseStore(client);
+      });
+    }
+    return Promise.resolve(new window.LocalStore());
+  }
+
+  // Aggiornamenti in tempo reale dal registro condiviso.
+  var reloadTimer;
+  function onRemoteEvent(ev) {
+    clearTimeout(reloadTimer);
+    reloadTimer = setTimeout(function () {
+      refresh().then(function () {
+        if (ev && ev.type === 'TRANSFER' && sameId(ev.to_id, myId())) {
+          var p = plateById(ev.plate_id);
+          toast('📦 Hai ricevuto ' + (p ? 'la targa ' + R.format(p.vehicleType, p.plate) : 'una targa') + ' da ' + garageName(ev.from_id) + '!');
+          confetti($('profile-btn'), 80);
+        }
+      }).catch(function () { /* noop */ });
+    }, 250);
   }
 
   function init() {
@@ -816,12 +941,22 @@
     try { tab = localStorage.getItem('random-targa:tab'); } catch (e) { /* noop */ }
     if (tab && $('tab-' + tab)) showTab(tab);
 
-    if (!ledger.state.wallets.length) {
-      openWelcome(false);
-    } else {
-      refreshAll();
-      checkProgress(true);
-    }
+    createStore().then(function (s) {
+      store = s;
+      document.body.dataset.mode = s.caps.shared ? 'shared' : 'local';
+      return store.init();
+    }).then(function (info) {
+      store.onEvent(onRemoteEvent);
+      return refresh().then(function () {
+        checkProgress(true);
+        document.body.classList.remove('loading');
+        if (info.needsOnboarding) openWelcome(false);
+      });
+    }).catch(function (e) {
+      document.body.classList.remove('loading');
+      $('boot-error').hidden = false;
+      $('boot-error-msg').textContent = e.message;
+    });
   }
 
   init();

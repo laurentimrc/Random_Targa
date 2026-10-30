@@ -1,7 +1,8 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const G = require('../js/game.js');
-const { Ledger, memoryStorage } = require('../js/ledger.js');
+const { memoryStorage } = require('../js/ledger.js');
+const { LocalStore } = require('../js/store-local.js');
 
 test('rarità delle combinazioni', () => {
   assert.strictEqual(G.analyze('auto', 'GA 123 BC').tier, 'rara'); // scala
@@ -21,18 +22,23 @@ test('livelli', () => {
   assert.ok(Math.abs(G.levelFor(275).progress - 0.5) < 1e-9);
 });
 
-test('XP e trofei ricavati dal registro', () => {
-  const ledger = new Ledger({ storage: memoryStorage() });
-  const a = ledger.addWallet('A');
-  const b = ledger.addWallet('B');
-  const { tx } = ledger.mint({ plate: 'GA777BC', vehicleType: 'auto', owner: a.address });
-  ledger.update(tx.tokenId, a.address, { color: 'Rosso' });
-  ledger.transfer(tx.tokenId, a.address, b.address);
-  const s = G.stats(ledger, a.address, { spins: 3 });
+test('XP e trofei ricavati dagli eventi', async () => {
+  const store = new LocalStore({ storage: memoryStorage() });
+  await store.createGarage('B');
+  const b = (await store.load()).me;
+  await store.createGarage('A');
+  let data = await store.load();
+  const a = data.me;
+  await store.mint('GA777BC', 'auto', {});
+  data = await store.load();
+  const plateId = data.plates[0].id;
+  await store.update(plateId, { color: 'Rosso' });
+  await store.transfer(plateId, b.code);
+  data = await store.load();
+  const s = G.stats({ id: a.id, events: data.events, owned: 0, spins: 3 });
   assert.strictEqual(s.xp, 400 + 20 + 75 + 6);
-  assert.strictEqual(s.owned, 0);
   const unlocked = G.achievements(s).filter(x => x.unlocked).map(x => x.id);
   assert.deepStrictEqual(unlocked.sort(), ['epic', 'first', 'gift', 'rare'].sort());
-  assert.strictEqual(G.stats(ledger, b.address).xp, 25);
-  assert.strictEqual(G.stats(ledger, a.address, { spins: 1000 }).xp, 400 + 20 + 75 + 200);
+  assert.strictEqual(G.stats({ id: b.id, events: data.events }).xp, 25);
+  assert.strictEqual(G.stats({ id: a.id, events: data.events, spins: 1000 }).xp, 400 + 20 + 75 + 200);
 });

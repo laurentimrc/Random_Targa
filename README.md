@@ -20,7 +20,33 @@ Dashboard web (HTML/CSS/JS, nessuna dipendenza) per:
   level-up, popup dei trofei, effetto 3D sulle targhe (disattivate con `prefers-reduced-motion`).
 
 > In Italia la combinazione della targa stradale non si sceglie: la targa creata qui è digitale/da collezione.
-> Il registro vive nel `localStorage` del browser: usa *Esporta registro* per conservarne una copia.
+
+## Due modalità
+
+- **Demo** (`js/config.js` vuoto): tutto resta nel browser, con più garage sullo stesso dispositivo, backup e ripristino.
+- **Registro condiviso con Supabase**: ogni targa esiste una sola volta per tutti gli utenti, le cessioni avvengono
+  tra persone diverse tramite il *codice garage*, c'è una classifica globale e chi riceve una targa viene avvisato
+  in tempo reale. L'accesso è anonimo e automatico (nessuna registrazione); collegando un'email il garage
+  si salva e si ritrova su altri dispositivi.
+
+## Collegare Supabase
+
+1. Crea un progetto su [supabase.com](https://supabase.com) (regione consigliata: Europa).
+2. In **SQL Editor** incolla ed esegui `supabase/migrations/20261030000000_registro_targhe.sql`
+   (oppure, con la CLI di Supabase: `supabase link` e `supabase db push`).
+3. In **Authentication → Sign In / Providers** attiva **Allow anonymous sign-ins** (e lascia attivo Email).
+4. In **Authentication → URL Configuration** imposta come *Site URL* l'indirizzo del sito pubblicato
+   e aggiungi `http://localhost:8080` tra i *Redirect URLs* per lo sviluppo.
+5. In **Project Settings → API Keys** copia *Project URL* e la chiave pubblica (*anon* o *publishable*)
+   in `js/config.js`. Non usare mai la chiave *service_role* / *secret* nel sito.
+6. Consigliato: attiva il CAPTCHA in **Authentication → Attack Protection**, per limitare gli account anonimi automatici.
+
+Sicurezza: le tabelle sono in sola lettura per il browser; ogni scrittura passa da funzioni del database che
+verificano proprietario e regole di composizione. Le operazioni sono concatenate da impronte SHA-256 e
+`verify_chain()` rileva qualsiasi modifica successiva.
+
+Limite attuale: il sito scarica tutto il registro per calcolare XP e classifica; va benissimo fino a
+qualche migliaio di operazioni, oltre conviene spostare i calcoli in viste del database.
 
 ## Avvio
 
@@ -29,18 +55,20 @@ npm start          # oppure: python3 -m http.server 8080
 # apri http://localhost:8080
 ```
 
-In alternativa basta aprire `index.html` nel browser.
-
 ## Test
 
 ```bash
-npm test
+npm test           # regole, registro locale, gioco
+npm run test:db    # schema Supabase su un Postgres locale (PGHOST/PGPORT/PGUSER), incluso il client JS
 ```
 
 ## Struttura
 
 - `js/targa-rules.js` — regole di composizione, validazione, serie progressiva, generatore, rendering SVG
-- `js/ledger.js` — SHA-256, wallet, registro a blocchi e operazioni sui token (mint, transfer, update, burn)
-- `js/game.js` — rarità, XP, livelli e trofei (ricavati dal registro)
+- `js/ledger.js` — registro locale a blocchi (SHA-256, proof-of-work leggera) per la modalità demo
+- `js/game.js` — rarità, XP, livelli e trofei (ricavati dagli eventi del registro)
+- `js/store-local.js`, `js/store-supabase.js` — archivio locale e condiviso, stessa interfaccia
+- `js/config.js` — configurazione di Supabase
 - `js/app.js` — interfaccia della dashboard e animazioni
-- `test/` — test con `node --test`
+- `supabase/migrations/` — schema, regole di sicurezza e funzioni del registro condiviso
+- `test/`, `supabase/tests/` — test

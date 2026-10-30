@@ -5,6 +5,7 @@
   "description": "Crea, tokenizza e gestisci la targa italiana del tuo mezzo",
   "scripts": {
     "test": "node --test test/*.test.js",
+    "test:db": "./supabase/tests/run.sh",
     "start": "python3 -m http.server 8080"
   },
   "license": "MIT"

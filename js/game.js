@@ -1,6 +1,6 @@
 /*
  * Meccaniche di gioco: rarità delle combinazioni, punti esperienza, livelli e trofei.
- * Tutto è derivato dal registro, così i progressi seguono il garage anche dopo un ripristino.
+ * Tutto è derivato dagli eventi del registro, così i progressi seguono il garage ovunque.
  */
 (function (root) {
   'use strict';
@@ -113,38 +113,39 @@
     };
   }
 
-  // Statistiche di un garage ricavate dalle operazioni nel registro.
-  function stats(ledger, address, extra) {
-    var addr = String(address || '').toLowerCase();
+  /*
+   * Statistiche di un garage ricavate dagli eventi del registro.
+   * input: { id, events, owned, spins }; ogni evento ha
+   * { type, from, to, plate, vehicleType, metadata } (MINT porta plate, tipo e metadati).
+   */
+  function stats(input) {
+    var id = String(input.id || '').toLowerCase();
     var s = {
       xp: 0, minted: 0, transfers: 0, received: 0, updates: 0, burns: 0,
-      spins: (extra && extra.spins) || 0, types: {}, bestRank: 0, rarities: [0, 0, 0, 0, 0], owned: 0
+      spins: input.spins || 0, types: {}, bestRank: 0, rarities: [0, 0, 0, 0, 0], owned: input.owned || 0
     };
-    ledger.state.chain.forEach(function (block) {
-      block.txs.forEach(function (tx) {
-        var from = String(tx.from || '').toLowerCase();
-        var to = String(tx.to || '').toLowerCase();
-        if (tx.type === 'MINT' && to === addr) {
-          var r = analyze(tx.vehicleType, tx.plate, { province: tx.metadata && tx.metadata.province });
-          s.minted++;
-          s.xp += r.xp;
-          s.types[tx.vehicleType] = true;
-          s.rarities[r.rank]++;
-          s.bestRank = Math.max(s.bestRank, r.rank);
-        } else if (tx.type === 'TRANSFER' && from === addr) {
-          s.transfers++; s.xp += XP.TRANSFER_OUT;
-        } else if (tx.type === 'TRANSFER' && to === addr) {
-          s.received++; s.xp += XP.TRANSFER_IN;
-        } else if (tx.type === 'UPDATE' && from === addr) {
-          s.updates++; s.xp += XP.UPDATE;
-        } else if (tx.type === 'BURN' && from === addr) {
-          s.burns++; s.xp += XP.BURN;
-        }
-      });
+    (input.events || []).forEach(function (ev) {
+      var from = String(ev.from || '').toLowerCase();
+      var to = String(ev.to || '').toLowerCase();
+      if (ev.type === 'MINT' && to === id) {
+        var r = analyze(ev.vehicleType, ev.plate, { province: ev.metadata && ev.metadata.province });
+        s.minted++;
+        s.xp += r.xp;
+        s.types[ev.vehicleType] = true;
+        s.rarities[r.rank]++;
+        s.bestRank = Math.max(s.bestRank, r.rank);
+      } else if (ev.type === 'TRANSFER' && from === id) {
+        s.transfers++; s.xp += XP.TRANSFER_OUT;
+      } else if (ev.type === 'TRANSFER' && to === id) {
+        s.received++; s.xp += XP.TRANSFER_IN;
+      } else if (ev.type === 'UPDATE' && from === id) {
+        s.updates++; s.xp += XP.UPDATE;
+      } else if (ev.type === 'BURN' && from === id) {
+        s.burns++; s.xp += XP.BURN;
+      }
     });
     s.xp += Math.min(s.spins * XP.SPIN, XP.SPIN_CAP);
     s.typeCount = Object.keys(s.types).length;
-    s.owned = ledger.tokensOf(address).length;
     s.level = levelFor(s.xp);
     return s;
   }

@@ -493,3 +493,40 @@ dialog.center { width: min(440px, calc(100vw - 32px)); text-align: center; }
   .input-row { flex-wrap: wrap; }
   .spin-btn { flex: 1 0 100%; }
 }
+
+/* Avvio */
+.boot { position: fixed; inset: 0; z-index: 90; display: none; place-items: center; background: var(--bg); }
+body.loading .boot { display: grid; }
+.boot-car { font-size: 56px; animation: drive 1.2s ease-in-out infinite; }
+.boot-error { position: fixed; z-index: 95; left: 50%; top: 30%; transform: translateX(-50%); width: min(420px, calc(100vw - 32px)); text-align: center; display: grid; gap: 8px; }
+
+/* Modalità */
+body[data-mode="shared"] .local-only, body[data-mode="local"] .shared-only, body:not([data-mode]) .shared-only { display: none !important; }
+.mode-chip { font-size: 12px; color: var(--muted); background: var(--surface-2); padding: 6px 10px; border-radius: 99px; }
+
+/* Profilo */
+.code-card {
+  display: grid; gap: 4px; justify-items: center; text-align: center; padding: 16px; margin-bottom: 16px; border-radius: 14px;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--primary-2) 12%, transparent), color-mix(in srgb, #8b3dff 12%, transparent));
+  border: 1px dashed color-mix(in srgb, var(--primary-2) 40%, var(--border));
+}
+.code-card .muted { font-size: 12px; }
+.code.big { font-size: 24px; font-weight: 800; letter-spacing: .08em; }
+.small-text { font-size: 13px; margin: 0 0 8px; }
+.login-other { margin-top: 12px; font-size: 13px; }
+.login-other summary { cursor: pointer; color: var(--muted); margin-bottom: 8px; }
+#local-garages { margin-bottom: 8px; }
+#dlg-to { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; text-transform: uppercase; letter-spacing: .06em; }
+#dlg-to-name[data-ok="1"] { color: var(--t-non-comune); font-weight: 700; }
+
+/* Classifica */
+.lb-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.leaderboard { width: 100%; border-collapse: collapse; font-size: 14px; }
+.leaderboard th, .leaderboard td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.leaderboard th { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); background: var(--surface-2); }
+.leaderboard .num { text-align: right; font-variant-numeric: tabular-nums; font-weight: 700; }
+.leaderboard tbody tr { animation: slideIn .35s ease both; animation-delay: calc(var(--i) * 40ms); }
+.leaderboard tr.me { background: color-mix(in srgb, var(--primary-2) 10%, transparent); }
+.leaderboard .rank { font-size: 18px; font-weight: 800; width: 48px; text-align: center; }
+.lb-name { display: inline-flex; align-items: center; gap: 10px; font-weight: 600; }
+.avatar.small { width: 28px; height: 28px; font-size: 11px; }
