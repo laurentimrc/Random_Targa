@@ -9,11 +9,15 @@ Dashboard web (HTML/CSS/JS, nessuna dipendenza) per:
   - posizione progressiva nella serie (numero → coppia finale → coppia iniziale) e stima dell'anno di emissione
   - banda UE a sinistra e banda destra opzionale con anno e sigla provincia (107 province)
   - anteprima SVG scaricabile
-- **Tokenizzarla**: ogni targa diventa un token non fungibile (stile ERC-721) coniato su un registro a blocchi
-  concatenati (SHA-256 + proof-of-work leggera). Una targa può esistere una sola volta nel registro.
-- **Gestirla nel garage**: wallet multipli, ricerca e filtri, modifica dei dati del veicolo, trasferimento
-  ad altri indirizzi, burn, storico delle operazioni, metadati JSON scaricabili, verifica d'integrità,
-  esportazione/importazione del registro.
+- **Certificarla**: ogni targa diventa un certificato digitale unico (sotto il cofano un token non fungibile
+  stile ERC-721 su un registro a blocchi SHA-256 con proof-of-work leggera). Il wallet è invisibile al cliente:
+  l'interfaccia parla solo di *garage*, *certificati*, *cessioni* e *rottamazioni*, senza indirizzi o gergo crypto.
+- **Gestirla nel garage**: più garage per dispositivo, ricerca, filtri, ordinamento per rarità, personalizzazione,
+  cessione ad altri garage, rottamazione, storia della targa, certificato scaricabile, backup/ripristino.
+- **Giocare**: punti esperienza, 10 livelli, 12 trofei, missioni, "ruota" che fa scorrere i caratteri come una
+  slot machine e 5 livelli di rarità (Comune → Leggendaria) per combinazioni speciali (palindromi, 777, 007, scale,
+  coppie gemelle, sigla della tua provincia…). Animazioni: timbro di certificazione, coriandoli, XP fluttuanti,
+  level-up, popup dei trofei, effetto 3D sulle targhe (disattivate con `prefers-reduced-motion`).
 
 > In Italia la combinazione della targa stradale non si sceglie: la targa creata qui è digitale/da collezione.
 > Il registro vive nel `localStorage` del browser: usa *Esporta registro* per conservarne una copia.
@@ -37,5 +41,6 @@ npm test
 
 - `js/targa-rules.js` — regole di composizione, validazione, serie progressiva, generatore, rendering SVG
 - `js/ledger.js` — SHA-256, wallet, registro a blocchi e operazioni sui token (mint, transfer, update, burn)
-- `js/app.js` — interfaccia della dashboard
+- `js/game.js` — rarità, XP, livelli e trofei (ricavati dal registro)
+- `js/app.js` — interfaccia della dashboard e animazioni
 - `test/` — test con `node --test`

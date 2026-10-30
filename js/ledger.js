@@ -309,6 +309,11 @@
     this.save();
   };
 
+  Ledger.prototype.renameWallet = function (address, name) {
+    this.requireWallet(address).name = name;
+    this.save();
+  };
+
   Ledger.prototype.activeWallet = function () {
     var a = this.state.activeWallet;
     return this.state.wallets.filter(function (w) { return w.address === a; })[0] || null;

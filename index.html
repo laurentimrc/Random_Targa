@@ -4,10 +4,10 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Random Targa</title>
-  <meta name="description" content="Crea una targa italiana personalizzata secondo le regole di composizione, tokenizzala e gestiscila nel tuo garage.">
+  <meta name="description" content="Crea la tua targa italiana, certificala e collezionala nel tuo garage.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -16,34 +16,55 @@
       <span class="brand-mark" aria-hidden="true">I</span>
       <div>
         <h1>Random Targa</h1>
-        <p>Crea, tokenizza e gestisci la targa del tuo mezzo</p>
+        <p>Crea, certifica e colleziona le tue targhe</p>
       </div>
     </div>
-    <div class="wallet" id="wallet">
-      <label for="wallet-select" class="sr-only">Wallet attivo</label>
-      <select id="wallet-select"></select>
-      <button class="btn ghost small" id="wallet-new" type="button">+ Wallet</button>
-      <button class="btn ghost small" id="wallet-copy" type="button" title="Copia indirizzo">Copia</button>
-    </div>
+    <button class="profile" id="profile-btn" type="button" aria-haspopup="dialog">
+      <span class="avatar" id="profile-avatar">G</span>
+      <span class="profile-text">
+        <strong id="profile-name">Il mio garage</strong>
+        <span class="profile-level"><span id="profile-level">Lv 1 · Foglio rosa</span></span>
+        <span class="xpbar mini"><span class="xpfill" id="profile-xpfill"></span></span>
+      </span>
+      <span class="chev" aria-hidden="true">▾</span>
+    </button>
   </header>
 
   <nav class="tabs" role="tablist">
-    <button role="tab" class="tab active" data-tab="crea" aria-selected="true">Crea targa</button>
-    <button role="tab" class="tab" data-tab="garage" aria-selected="false">Garage <span class="badge" id="garage-count">0</span></button>
-    <button role="tab" class="tab" data-tab="registro" aria-selected="false">Registro</button>
-    <button role="tab" class="tab" data-tab="regole" aria-selected="false">Regole</button>
+    <button role="tab" class="tab active" data-tab="crea" aria-selected="true">🎰 Crea</button>
+    <button role="tab" class="tab" data-tab="garage" aria-selected="false">🚗 Garage <span class="badge" id="garage-count">0</span></button>
+    <button role="tab" class="tab" data-tab="trofei" aria-selected="false">🏆 Trofei <span class="badge" id="trophy-count">0</span></button>
+    <button role="tab" class="tab" data-tab="storico" aria-selected="false">📜 Storico</button>
+    <button role="tab" class="tab" data-tab="regole" aria-selected="false">📘 Regole</button>
   </nav>
 
   <main>
-    <section class="kpis" aria-label="Riepilogo">
-      <div class="kpi"><span class="kpi-label">Targhe nel garage</span><span class="kpi-value" id="kpi-owned">0</span></div>
-      <div class="kpi"><span class="kpi-label">Token coniati</span><span class="kpi-value" id="kpi-minted">0</span></div>
-      <div class="kpi"><span class="kpi-label">Blocchi nel registro</span><span class="kpi-value" id="kpi-blocks">1</span></div>
-      <div class="kpi"><span class="kpi-label">Integrità registro</span><span class="kpi-value" id="kpi-integrity">—</span></div>
+    <section class="hud" aria-label="I tuoi progressi">
+      <div class="hud-level card">
+        <div class="ring" id="level-ring" style="--p:0">
+          <span class="ring-num" id="level-num">1</span>
+          <span class="ring-lbl">livello</span>
+        </div>
+        <div class="hud-level-text">
+          <strong id="level-name">Foglio rosa</strong>
+          <span class="muted" id="level-next">150 XP al prossimo livello</span>
+          <div class="xpbar"><span class="xpfill" id="level-xpfill"></span></div>
+          <span class="xp-total"><span id="xp-total">0</span> XP</span>
+        </div>
+      </div>
+      <div class="hud-stats">
+        <div class="stat card"><span class="stat-ico">🚗</span><span class="stat-val" id="stat-owned">0</span><span class="stat-lbl">Targhe nel garage</span></div>
+        <div class="stat card"><span class="stat-ico">🏆</span><span class="stat-val" id="stat-trophies">0</span><span class="stat-lbl">Trofei</span></div>
+        <div class="stat card"><span class="stat-ico">💎</span><span class="stat-val" id="stat-best">—</span><span class="stat-lbl">Rarità migliore</span></div>
+      </div>
+      <div class="missions card">
+        <h3>Missioni</h3>
+        <ul id="missions"></ul>
+      </div>
     </section>
 
     <!-- CREA -->
-    <section class="panel active" id="tab-crea" role="tabpanel">
+    <section class="panel" id="tab-crea" role="tabpanel">
       <div class="grid-2">
         <div class="card">
           <h2>Componi la targa</h2>
@@ -51,25 +72,25 @@
           <div class="field">
             <span class="field-label">Tipo di veicolo</span>
             <div class="segmented" id="type-select">
-              <button type="button" data-type="auto" class="active">Auto</button>
-              <button type="button" data-type="moto">Moto</button>
-              <button type="button" data-type="ciclomotore">Ciclomotore</button>
-              <button type="button" data-type="rimorchio">Rimorchio</button>
+              <button type="button" data-type="auto" class="active">🚗 Auto</button>
+              <button type="button" data-type="moto">🏍️ Moto</button>
+              <button type="button" data-type="ciclomotore">🛵 Ciclomotore</button>
+              <button type="button" data-type="rimorchio">🚚 Rimorchio</button>
             </div>
           </div>
 
           <div class="field">
-            <label class="field-label" for="plate-input">Combinazione</label>
+            <label class="field-label" for="plate-input">La tua combinazione</label>
             <div class="input-row">
               <input id="plate-input" autocomplete="off" spellcheck="false" maxlength="10" placeholder="GA 123 BC">
-              <button class="btn" type="button" id="random-btn">Genera casuale</button>
+              <button class="btn spin-btn" type="button" id="random-btn"><span class="spin-ico">🎰</span> Gira la ruota</button>
             </div>
             <p class="hint" id="type-hint"></p>
           </div>
 
           <div class="grid-2 tight" id="band-options">
             <div class="field">
-              <label class="field-label" for="province-select">Sigla provincia (banda destra)</label>
+              <label class="field-label" for="province-select">Sigla provincia</label>
               <select id="province-select"><option value="">Nessuna</option></select>
             </div>
             <div class="field">
@@ -78,28 +99,38 @@
             </div>
           </div>
 
-          <label class="check"><input type="checkbox" id="issued-only" checked> Genera solo serie già emesse</label>
+          <label class="check"><input type="checkbox" id="issued-only" checked> La ruota pesca solo serie già in circolazione</label>
 
           <h3>Verifica regole</h3>
           <ul class="checks" id="checks"></ul>
         </div>
 
         <div class="card preview-card">
-          <h2>Anteprima</h2>
-          <div class="plate-stage" id="plate-preview"></div>
+          <div class="preview-head">
+            <h2>Anteprima</h2>
+            <span class="rarity" id="rarity-badge" data-tier="comune">Comune</span>
+          </div>
+          <div class="plate-stage" id="plate-stage">
+            <div class="tilt" id="plate-preview"></div>
+            <div class="stamp" id="stamp" aria-hidden="true">CERTIFICATA ✓</div>
+          </div>
+          <ul class="traits" id="traits"></ul>
           <dl class="facts" id="facts"></dl>
 
-          <h3>Dati del veicolo <span class="muted">(metadati del token)</span></h3>
+          <h3>Il tuo veicolo</h3>
           <div class="grid-2 tight">
-            <div class="field"><label class="field-label" for="meta-alias">Nome</label><input id="meta-alias" placeholder="La mia Panda"></div>
+            <div class="field"><label class="field-label" for="meta-alias">Soprannome</label><input id="meta-alias" placeholder="La Saetta"></div>
             <div class="field"><label class="field-label" for="meta-make">Marca</label><input id="meta-make" placeholder="Fiat"></div>
             <div class="field"><label class="field-label" for="meta-model">Modello</label><input id="meta-model" placeholder="Panda 4x4"></div>
             <div class="field"><label class="field-label" for="meta-color">Colore</label><input id="meta-color" placeholder="Rosso"></div>
           </div>
 
           <div class="actions">
-            <button class="btn primary" type="button" id="mint-btn">Tokenizza e aggiungi al garage</button>
-            <button class="btn ghost" type="button" id="download-svg">Scarica SVG</button>
+            <button class="btn primary big" type="button" id="mint-btn">
+              <span>Certifica e aggiungi al garage</span>
+              <span class="reward" id="mint-reward">+100 XP</span>
+            </button>
+            <button class="btn ghost" type="button" id="download-svg">Scarica immagine</button>
           </div>
           <p class="hint" id="mint-status" role="status"></p>
         </div>
@@ -109,7 +140,7 @@
     <!-- GARAGE -->
     <section class="panel" id="tab-garage" role="tabpanel" hidden>
       <div class="toolbar">
-        <input id="garage-search" type="search" placeholder="Cerca per targa, nome o modello">
+        <input id="garage-search" type="search" placeholder="Cerca per targa, soprannome o modello">
         <select id="garage-filter">
           <option value="">Tutti i veicoli</option>
           <option value="auto">Auto</option>
@@ -117,29 +148,51 @@
           <option value="ciclomotore">Ciclomotori</option>
           <option value="rimorchio">Rimorchi</option>
         </select>
+        <select id="garage-sort">
+          <option value="recent">Più recenti</option>
+          <option value="rarity">Più rare</option>
+        </select>
       </div>
       <div class="garage-grid" id="garage-grid"></div>
       <div class="empty" id="garage-empty" hidden>
-        <p>Il tuo garage è vuoto.</p>
+        <div class="empty-ico">🅿️</div>
+        <p>Il tuo garage è ancora vuoto.</p>
         <button class="btn primary" type="button" data-goto="crea">Crea la tua prima targa</button>
       </div>
     </section>
 
-    <!-- REGISTRO -->
-    <section class="panel" id="tab-registro" role="tabpanel" hidden>
+    <!-- TROFEI -->
+    <section class="panel" id="tab-trofei" role="tabpanel" hidden>
+      <div class="trophy-grid" id="trophy-grid"></div>
+      <div class="card rarity-legend">
+        <h3>Rarità delle combinazioni</h3>
+        <p class="muted">Palindromi, 777, 007, scale, coppie gemelle e sigle della tua provincia valgono di più. Più è rara la targa, più XP guadagni.</p>
+        <div class="legend" id="rarity-legend"></div>
+      </div>
+    </section>
+
+    <!-- STORICO -->
+    <section class="panel" id="tab-storico" role="tabpanel" hidden>
       <div class="toolbar">
-        <button class="btn" type="button" id="verify-btn">Verifica integrità</button>
-        <button class="btn ghost" type="button" id="export-btn">Esporta registro</button>
-        <label class="btn ghost" for="import-file">Importa registro</label>
+        <button class="btn" type="button" id="verify-btn">🛡️ Verifica autenticità</button>
+        <button class="btn ghost" type="button" id="export-btn">Salva backup</button>
+        <label class="btn ghost" for="import-file">Ripristina backup</label>
         <input type="file" id="import-file" accept="application/json" hidden>
-        <button class="btn danger ghost" type="button" id="reset-btn">Azzera</button>
+        <button class="btn danger ghost" type="button" id="reset-btn">Ricomincia da zero</button>
       </div>
       <div class="card">
-        <table class="ledger">
-          <thead><tr><th>#</th><th>Data</th><th>Operazione</th><th>Targa</th><th>Da → A</th><th>Hash blocco</th></tr></thead>
-          <tbody id="ledger-body"></tbody>
-        </table>
+        <ol class="feed" id="feed"></ol>
       </div>
+      <details class="card tech">
+        <summary>Dettagli tecnici dei certificati</summary>
+        <p class="muted">Ogni operazione è registrata in un archivio sigillato: ogni voce contiene l'impronta della precedente, quindi qualsiasi modifica viene rilevata.</p>
+        <div class="table-wrap">
+          <table class="ledger">
+            <thead><tr><th>#</th><th>Data</th><th>Operazione</th><th>Targa</th><th>Impronta</th></tr></thead>
+            <tbody id="ledger-body"></tbody>
+          </table>
+        </div>
+      </details>
     </section>
 
     <!-- REGOLE -->
@@ -157,51 +210,102 @@
         <p>La banda blu sinistra riporta il cerchio di stelle dell'Unione Europea e la sigla internazionale <strong>I</strong>. Nella banda destra possono comparire, facoltativamente, l'anno d'immatricolazione (in alto) e la sigla della provincia (in basso).</p>
         <h3>Combinazioni riservate</h3>
         <p>Il prefisso <strong>EE</strong> è riservato ai veicoli per Escursionisti Esteri; i rimorchi iniziano sempre con <strong>X</strong>, così come i contrassegni dei ciclomotori.</p>
-        <p class="note">In Italia non è possibile scegliere la combinazione della targa stradale: quella creata qui è una targa digitale/da collezione. Il registro di tokenizzazione è locale al browser: esportalo per conservarne una copia. L'anno stimato della serie è un'approssimazione.</p>
+        <h3>Come si guadagnano XP</h3>
+        <ul id="xp-rules"></ul>
+        <p class="note">In Italia non è possibile scegliere la combinazione della targa stradale: quella creata qui è una targa digitale da collezione. Ogni targa può esistere una sola volta: chi la certifica per primo ne diventa il proprietario. I dati restano su questo dispositivo, salva un backup per conservarli.</p>
       </div>
     </section>
   </main>
 
-  <dialog id="token-dialog">
-    <form method="dialog" class="dialog-inner" id="token-form">
+  <!-- Benvenuto -->
+  <dialog id="welcome-dialog" class="center">
+    <form method="dialog" class="dialog-inner" id="welcome-form">
+      <div class="welcome-hero" aria-hidden="true">🚗💨</div>
+      <h2>Benvenuto su Random Targa!</h2>
+      <p class="muted">Crea targhe italiane, certificale e collezionale. Più sono rare, più sali di livello.</p>
+      <div class="field">
+        <label class="field-label" for="welcome-name">Come si chiama il tuo garage?</label>
+        <input id="welcome-name" maxlength="32" placeholder="Il garage di Marco" required>
+      </div>
+      <button class="btn primary big" type="submit">Apri il garage</button>
+    </form>
+  </dialog>
+
+  <!-- Profilo -->
+  <dialog id="profile-dialog">
+    <form method="dialog" class="dialog-inner">
       <header class="dialog-head">
-        <h2 id="dlg-title">Dettagli token</h2>
+        <h2>I tuoi garage</h2>
+        <button class="btn ghost small" value="close" aria-label="Chiudi">✕</button>
+      </header>
+      <ul class="garage-list" id="garage-list"></ul>
+      <div class="field">
+        <label class="field-label" for="rename-input">Rinomina il garage attivo</label>
+        <div class="input-row">
+          <input id="rename-input" maxlength="32">
+          <button class="btn" type="button" id="rename-btn">Salva</button>
+        </div>
+      </div>
+      <div class="actions"><button class="btn primary" type="button" id="new-garage-btn">+ Nuovo garage</button></div>
+    </form>
+  </dialog>
+
+  <!-- Dettaglio targa -->
+  <dialog id="token-dialog">
+    <form method="dialog" class="dialog-inner">
+      <header class="dialog-head">
+        <h2 id="dlg-title">La tua targa</h2>
         <button class="btn ghost small" value="close" aria-label="Chiudi">✕</button>
       </header>
       <div class="plate-stage small" id="dlg-plate"></div>
+      <div class="dlg-badges" id="dlg-badges"></div>
       <dl class="facts" id="dlg-facts"></dl>
 
-      <h3>Modifica dati</h3>
+      <h3>Personalizza <span class="reward-inline">+20 XP</span></h3>
       <div class="grid-2 tight">
-        <div class="field"><label class="field-label" for="dlg-alias">Nome</label><input id="dlg-alias"></div>
+        <div class="field"><label class="field-label" for="dlg-alias">Soprannome</label><input id="dlg-alias"></div>
         <div class="field"><label class="field-label" for="dlg-make">Marca</label><input id="dlg-make"></div>
         <div class="field"><label class="field-label" for="dlg-model">Modello</label><input id="dlg-model"></div>
         <div class="field"><label class="field-label" for="dlg-color">Colore</label><input id="dlg-color"></div>
       </div>
       <div class="actions"><button class="btn" type="button" id="dlg-save">Salva modifiche</button></div>
 
-      <h3>Trasferisci</h3>
-      <div class="input-row">
-        <input id="dlg-to" list="wallet-list" placeholder="0x… indirizzo destinatario">
-        <datalist id="wallet-list"></datalist>
-        <button class="btn" type="button" id="dlg-transfer">Trasferisci</button>
+      <h3>Cedi a un altro garage <span class="reward-inline">+75 XP</span></h3>
+      <div class="input-row" id="dlg-transfer-row">
+        <select id="dlg-to"></select>
+        <button class="btn" type="button" id="dlg-transfer">🎁 Cedi</button>
       </div>
+      <p class="hint" id="dlg-transfer-hint"></p>
 
-      <h3>Storico</h3>
+      <h3>Storia della targa</h3>
       <ol class="history" id="dlg-history"></ol>
 
       <div class="actions spread">
-        <button class="btn ghost" type="button" id="dlg-metadata">Scarica metadati JSON</button>
-        <button class="btn danger" type="button" id="dlg-burn">Brucia token</button>
+        <button class="btn ghost" type="button" id="dlg-cert">Scarica certificato</button>
+        <button class="btn danger" type="button" id="dlg-burn">♻️ Rottama</button>
       </div>
       <p class="hint" id="dlg-status" role="status"></p>
     </form>
   </dialog>
 
+  <!-- Level up -->
+  <dialog id="levelup-dialog" class="center">
+    <form method="dialog" class="dialog-inner levelup">
+      <div class="levelup-burst" aria-hidden="true"></div>
+      <span class="levelup-kicker">Livello superiore!</span>
+      <div class="levelup-num" id="levelup-num">2</div>
+      <h2 id="levelup-name">Neopatentato</h2>
+      <button class="btn primary big" value="close">Avanti tutta!</button>
+    </form>
+  </dialog>
+
+  <div class="achievements-stack" id="achievements-stack" aria-live="polite"></div>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <div class="fx-layer" id="fx-layer" aria-hidden="true"></div>
 
   <script src="js/targa-rules.js"></script>
   <script src="js/ledger.js"></script>
+  <script src="js/game.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>
