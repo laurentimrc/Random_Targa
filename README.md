@@ -48,6 +48,12 @@ verificano proprietario e regole di composizione. Le operazioni sono concatenate
 Limite attuale: il sito scarica tutto il registro per calcolare XP e classifica; va benissimo fino a
 qualche migliaio di operazioni, oltre conviene spostare i calcoli in viste del database.
 
+## Pubblicazione
+
+Il workflow `.github/workflows/pages.yml` esegue i test e pubblica il sito su GitHub Pages a ogni push su `main`
+(`https://laurentimrc.github.io/Random_Targa/`). Da attivare una volta in **Settings → Pages → Source: GitHub Actions**.
+Dopo la prima pubblicazione imposta quell'indirizzo come *Site URL* in Supabase (**Authentication → URL Configuration**).
+
 ## Avvio
 
 ```bash
